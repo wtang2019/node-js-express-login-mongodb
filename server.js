@@ -1,10 +1,53 @@
+var newrelic = require("newrelic");
 const express = require("express");
+//const Sentry = require('@sentry/node');
+const Tracing = require("@sentry/tracing");
 const cors = require("cors");
 const cookieSession = require("cookie-session");
-
 const dbConfig = require("./app/config/db.config");
-
 const app = express();
+const winston = require('winston');
+
+
+const customFormat = winston.format.printf((info) => {
+  return `${info.timestamp} [${info.label}] ${info.level}: ${info.message} ${info.commit}`;
+});
+
+const logger = winston.createLogger({
+  format: winston.format.combine(
+    winston.format.label({ label: 'Wilmers App' }),
+    winston.format.timestamp(),
+    customFormat
+  ),
+  transports: [new winston.transports.Console()]
+});
+
+/*
+Sentry.init({
+  dsn: "https://9b190512e7c84ec5a7f8fcca96129e68@o4504284008939520.ingest.sentry.io/4504284012871680",
+  integrations: [
+    // enable HTTP calls tracing
+    new Sentry.Integrations.Http({ tracing: true }),
+    // enable Express.js middleware tracing
+    new Tracing.Integrations.Express({ app }),
+  ],
+
+  // Set tracesSampleRate to 1.0 to capture 100%
+  // of transactions for performance monitoring.
+  // We recommend adjusting this value in production
+  tracesSampleRate: 1.0,
+});
+
+// RequestHandler creates a separate execution context using domains, so that every
+// transaction/span/breadcrumb is attached to its own Hub instance
+app.use(Sentry.Handlers.requestHandler());
+// TracingHandler creates a trace for every incoming request
+app.use(Sentry.Handlers.tracingHandler());
+*/
+newrelic.instrumentLoadedModule(
+  "express",    // the module's name, as a string
+  express // the module instance
+);
 
 var corsOptions = {
   origin: "http://localhost:8081"
@@ -35,11 +78,18 @@ db.mongoose
     useUnifiedTopology: true
   })
   .then(() => {
-    console.log("Successfully connect to MongoDB.");
+    logger.log({
+      level: 'info',
+      message: 'Successfully connect to MongoDB.'
+    });
     initial();
   })
   .catch(err => {
-    console.error("Connection error", err);
+    logger.log({
+      level: 'error',
+      message: 'Connection error',
+      err: err
+    });
     process.exit();
   });
 
@@ -52,10 +102,33 @@ app.get("/", (req, res) => {
 require("./app/routes/auth.routes")(app);
 require("./app/routes/user.routes")(app);
 
+/*
+app.get("/debug-sentry", function mainHandler(req, res) {
+  throw new Error("My first Sentry error!");
+});
+
+// The error handler must be before any other error middleware and after all controllers
+app.use(Sentry.Handlers.errorHandler());
+
+// Optional fallthrough error handler
+app.use(function onError(err, req, res, next) {
+  // The error id is attached to `res.sentry` to be returned
+  // and optionally displayed to the user for support.
+  res.statusCode = 500;
+  res.end(res.sentry + "\n");
+});
+*/
+
 // set port, listen for requests
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}.`);
+  newrelic.addCustomAttributes({
+    "tags.commit": revision
+  });
+  logger.log({
+    level: 'info',
+    message: `Server is running on port ${PORT}.`,
+  });
 });
 
 function initial() {
