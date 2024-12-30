@@ -87,7 +87,7 @@ db.mongoose
   .catch(err => {
     logger.log({
       level: 'error',
-      message: 'Connection error',
+      message: 'Connection Error, please check if MongoDb is installed',
       err: err
     });
     process.exit();
